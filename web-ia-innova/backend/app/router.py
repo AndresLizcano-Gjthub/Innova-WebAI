@@ -58,6 +58,15 @@ _CONFUNDIBLES = {
 }
 
 
+# Caracteres que se ven vacíos pero no son de formato (Cf): relleno de Hangul, braille en blanco...
+_IGNORABLES = {0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800}
+
+# Guion (normal, U+2010 o U+2011) entre dos letras y un salto de línea: corte silábico de PDF/Word.
+_GUION_DE_CORTE = re.compile(
+    r"(?<=[^\W\d_])[" + re.escape("-" + chr(0x2010) + chr(0x2011)) + r"]\s*[\r\n]\s*(?=[^\W\d_])"
+)
+
+
 def _escrituras(palabra: str) -> set[str]:
     """Escrituras (LATIN / CYRILLIC / GREEK) de las letras de una palabra."""
     encontradas = set()
@@ -65,6 +74,10 @@ def _escrituras(palabra: str) -> set[str]:
         nombre = unicodedata.name(c, "")
         for escritura in ("LATIN", "CYRILLIC", "GREEK"):
             if nombre.startswith(escritura):
+                # Letras griegas que NO imitan una letra latina (µ, Ω, Δ, λ, π...) son símbolos
+                # científicos normales ("5 µg", "10 kΩ"): no deben contar como homoglifo.
+                if escritura == "GREEK" and ord(c) not in _CONFUNDIBLES:
+                    continue
                 encontradas.add(escritura)
     return encontradas
 
@@ -91,7 +104,14 @@ def _limpiar(text: str) -> str:
     """
     plegado = "".join(c for c in text.casefold() if unicodedata.category(c) != "Cf")
     descompuesto = unicodedata.normalize("NFKD", plegado)
-    return "".join(c for c in descompuesto if not unicodedata.combining(c))
+    # Fuera todas las marcas (Mn/Me: tildes, selectores de variación...) y los "ignorables" que se
+    # ven vacíos pero no son Cf (relleno de Hangul, braille en blanco...).
+    limpio = "".join(
+        c for c in descompuesto
+        if unicodedata.category(c) not in ("Mn", "Me") and ord(c) not in _IGNORABLES
+    )
+    # Palabra partida con guion al final de línea (corte silábico): se une SOLO para comparar.
+    return _GUION_DE_CORTE.sub("", limpio)
 
 
 @lru_cache(maxsize=4)  # Una petición normaliza el mismo texto en varias reglas: se calcula una vez.

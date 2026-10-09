@@ -28,6 +28,14 @@ class RealProvider:
         raise ProviderError(f"Proveedor real para '{model}' aún no implementado")
 
 
+def modo_real() -> bool:
+    """ÚNICA fuente de verdad sobre si estamos en modo real (la usan main.py y get_provider).
+
+    Si dos sitios decidieran por su cuenta, uno podría quedar en real y otro en mock sin que
+    nadie lo note. Es como un único `isProduction()` en Java en vez de comparar el String en cada clase.
+    """
+    return os.getenv("PROVIDER_MODE", "mock").lower() == "real"
+
+
 def get_provider():
-    mode = os.getenv("PROVIDER_MODE", "mock").lower()
-    return RealProvider() if mode == "real" else MockProvider()
+    return RealProvider() if modo_real() else MockProvider()

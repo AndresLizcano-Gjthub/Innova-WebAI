@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.providers import ProviderError, get_provider
+from app.providers import ProviderError, get_provider, modo_real
 from app.gestora import get_classifier, gestora_status
 from app.router import PRIVATE_CATEGORY, decide, fallback_models
 from app.schemas import OrchestrateRequest, OrchestrateResponse
@@ -28,6 +28,15 @@ origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:300
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["POST", "GET"], allow_headers=["Content-Type", "Authorization"])
 
 
+def _ruta_privada_valida() -> bool:
+    """PRIVATE_ROUTE_URL debe existir (sin contar espacios) y ser https://.
+
+    PENDIENTE (P-02): todavía no existe un proveedor privado que USE esta URL; mientras tanto
+    es solo una compuerta de seguridad. Bloquea PROVIDER_MODE=real hasta decidir dónde corre la ruta privada.
+    """
+    return os.getenv("PRIVATE_ROUTE_URL", "").strip().lower().startswith("https://")
+
+
 @app.get("/health")
 def health():
     # gestora_status() informa el modo efectivo y SI hay clave (true/false), nunca la clave.
@@ -39,7 +48,7 @@ def orchestrate(req: OrchestrateRequest):
     start = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = get_provider()
-    is_mock = os.getenv("PROVIDER_MODE", "mock").lower() != "real"
+    is_mock = not modo_real()
 
     decision = decide(req.message, get_classifier())
     model, reason, fallback_used = decision.model, decision.reason, False
@@ -47,7 +56,7 @@ def orchestrate(req: OrchestrateRequest):
     # P-02, fallo cerrado: en modo real, lo privado solo va a una ruta privada CONFIGURADA
     # (PRIVATE_ROUTE_URL). Sin ella NO se llama a ningún proveedor, para no enviar texto
     # sensible a un tercero por accidente. En modo mock no hace falta (no sale nada).
-    if decision.category == PRIVATE_CATEGORY and not is_mock and not os.getenv("PRIVATE_ROUTE_URL"):
+    if decision.category == PRIVATE_CATEGORY and not is_mock and not _ruta_privada_valida():
         log.warning("req=%s category=%s ruta privada no configurada: 503", request_id, decision.category)
         raise HTTPException(status_code=503, detail="Ruta privada no disponible todavía")
 
