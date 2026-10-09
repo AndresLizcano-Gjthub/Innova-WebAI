@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { MAX_MESSAGE_CHARS } from "@/services/orchestratorApi";
+import { MAX_MESSAGE_CHARS, ORCHESTRATOR_CONFIGURED } from "@/services/orchestratorApi";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
@@ -83,6 +83,15 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
             : `${length.toLocaleString("es")} de ${MAX_MESSAGE_CHARS.toLocaleString("es")} caracteres`)}
       </p>
       <p className="composer__hint">Enter para enviar · Shift + Enter para salto de línea</p>
+      {/* Aviso de privacidad: solo con backend configurado (sin backend no hay Gemini y sería falso).
+          Va junto al input, separado del aviso de "respuestas simuladas" de la bienvenida y de la
+          insignia "Datos de prueba" de cada respuesta, que siguen visibles. */}
+      {ORCHESTRATOR_CONFIGURED && (
+        <p className="composer__privacy">
+          La IA Gestora clasifica tu mensaje con Gemini (Google). No envíes datos sensibles; los mensajes marcados como
+          confidenciales no se envían a la IA Gestora (Gemini).
+        </p>
+      )}
     </div>
   );
 }

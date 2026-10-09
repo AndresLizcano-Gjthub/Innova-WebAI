@@ -17,7 +17,7 @@ export default function WelcomeScreen({ onPick }: WelcomeScreenProps) {
       <h1>Prototipo de una interfaz multimodelo.</h1>
       <p>Escribe tu pregunta para probar la interfaz. Las respuestas que verás son simuladas.</p>
       <p className="welcome__notice" role="note">
-        Prototipo en desarrollo: todavía no hay un orquestador real ni modelos de IA conectados.
+        Prototipo en desarrollo: las respuestas son simuladas; todavía no hay modelos de IA conectados para generarlas.
       </p>
       <div className="welcome__suggestions">
         {SUGGESTIONS.map((s) => (

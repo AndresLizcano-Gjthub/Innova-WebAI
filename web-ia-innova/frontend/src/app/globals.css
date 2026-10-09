@@ -140,6 +140,8 @@ button:disabled { cursor: not-allowed; }
 .composer__counter:empty { display: none; }
 .composer__counter--over { color: var(--danger); font-weight: 500; }
 .composer__hint { margin: 6px 4px 0; font-size: 0.8rem; color: var(--text-muted); }
+/* Se mantiene visible también en móvil (a diferencia del hint de teclado). */
+.composer__privacy { margin: 4px 4px 0; font-size: 0.8rem; line-height: 1.4; color: var(--text-muted); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 800px) {
