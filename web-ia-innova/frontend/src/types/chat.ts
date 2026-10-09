@@ -9,7 +9,11 @@ export interface ResponseMeta {
   reason?: string;
   latencyMs?: number;
   isMock?: boolean; // true cuando la respuesta es de prueba (no viene del orquestador)
+  // Quién tomó la decisión de ruteo (campo `decided_by` del backend). Analogía Java: un enum.
+  decidedBy?: DecidedBy;
 }
+
+export type DecidedBy = "regla" | "gestora_llm" | "regla_respaldo";
 
 export interface Message {
   id: string;

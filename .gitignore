@@ -1,0 +1,30 @@
+# Memoria del proyecto (bóveda de Obsidian) y archivos de Claude: no se versionan
+InnovaBov/
+.obsidian/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md
+**/CLAUDE.local.md
+PROMPT-*.md
+
+# Generado al ejecutar las pruebas de Python
+__pycache__/
+
+# Secretos: nunca se versionan (como no subir un application-secrets.properties en Java)
+.env
+.env.*
+*.env
+!.env.example
+
+# Dependencias y builds generados
+node_modules/
+.next/
+next-env.d.ts
+.venv/
+*.pyc
+*.tsbuildinfo
+.vercel/
+
+# Bloqueo local de skills de Claude (no es parte del producto)
+skills-lock.json
