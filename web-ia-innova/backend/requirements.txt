@@ -1,3 +1,6 @@
-fastapi>=0.110
-uvicorn[standard]>=0.29
-pydantic>=2
+# Versiones fijadas (las probadas con las pruebas). Analogía Java: versiones exactas en el pom.xml.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.0
+httpx==0.28.1
+python-dotenv==1.2.4
