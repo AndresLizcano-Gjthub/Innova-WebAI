@@ -1,0 +1,8 @@
+WEB IA INNOVA - paquete completo
+
+frontend/  -> interfaz (Next.js). Entrar a la carpeta y ejecutar: npm install  y luego  npm run dev
+backend/   -> orquestador basico (FastAPI). Ver backend/README.md
+logo-web-ia-innova.svg -> logo
+vista-previa.html -> vista previa del diseno (abrir en el navegador)
+
+Las respuestas son DE PRUEBA hasta implementar los proveedores reales.

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Logo Web IA INNOVA">
+  <g fill="none" stroke="#6D28D9" stroke-width="6" stroke-linecap="round">
+    <path d="M46 37 C41 26 35 20 27 16"/>
+    <path d="M74 37 C79 26 85 20 93 16"/>
+  </g>
+  <circle cx="26" cy="15" r="7" fill="#6D28D9"/>
+  <circle cx="94" cy="15" r="7" fill="#6D28D9"/>
+  <ellipse cx="60" cy="72" rx="44" ry="38" fill="#6D28D9"/>
+  <rect x="42" y="61" width="10" height="19" rx="5" fill="#fff"/>
+  <rect x="68" y="61" width="10" height="19" rx="5" fill="#fff"/>
+</svg>
