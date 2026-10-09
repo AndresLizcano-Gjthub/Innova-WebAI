@@ -26,7 +26,7 @@ def health():
 
 @app.post("/orchestrate", response_model=OrchestrateResponse)
 def orchestrate(req: OrchestrateRequest):
-    start = time.time()
+    start = time.perf_counter()
     request_id = str(uuid.uuid4())
     provider = get_provider()
     is_mock = os.getenv("PROVIDER_MODE", "mock").lower() != "real"
@@ -37,21 +37,23 @@ def orchestrate(req: OrchestrateRequest):
     try:
         content = provider.generate(model, req.message)
     except ProviderError as exc:
-        log.warning("Falló %s: %s. Probando respaldo.", model, exc)
+        # Solo el tipo de error: el texto de la excepción podría incluir contenido del usuario.
+        log.warning("Falló %s (%s). Probando respaldo.", model, type(exc).__name__)
         content = None
-        for backup in fallback_models(model):
+        for backup in fallback_models(decision.category, model):
             try:
                 content = provider.generate(backup, req.message)
                 model, fallback_used = backup, True
                 reason = f"{reason} (respaldo: falló el modelo principal)"
                 break
-            except ProviderError:
+            except ProviderError as backup_exc:
+                log.warning("Respaldo %s también falló (%s).", backup, type(backup_exc).__name__)
                 continue
         if content is None:
             # Error normalizado sin exponer detalles internos.
             raise HTTPException(status_code=502, detail="Ningún proveedor disponible en este momento.")
 
-    latency_ms = int((time.time() - start) * 1000)
+    latency_ms = int((time.perf_counter() - start) * 1000)
     # Registro de la decisión (el contenido del usuario NO se guarda en logs).
     log.info("req=%s category=%s model=%s fallback=%s latency_ms=%s",
              request_id, decision.category, model, fallback_used, latency_ms)

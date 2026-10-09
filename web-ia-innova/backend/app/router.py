@@ -23,6 +23,8 @@ NEMOTRON = "nemotron-3-ultra"
 LONG_CONTEXT_CHARS = 8000
 SHORT_TASK_CHARS = 200
 
+PRIVATE_CATEGORY = "procesamiento_privado"
+
 # Orden de respaldo si el modelo elegido falla (nunca incluye al propio modelo fallido).
 FALLBACK_ORDER = [TERRA, CLAUDE, NEMOTRON]
 
@@ -74,7 +76,7 @@ PALABRAS_PRIVADAS = [
 
 RULES: list[Rule] = [
     # Privacidad primero: lo sensible no debe salir a proveedores externos.
-    Rule(10, "procesamiento_privado", NEMOTRON,
+    Rule(10, PRIVATE_CATEGORY, NEMOTRON,
          "Contenido sensible o privado: ruta controlada",
          lambda m: _has(m, PALABRAS_PRIVADAS)),
     Rule(20, "trabajo_masivo", NEMOTRON,
@@ -112,5 +114,13 @@ def choose_route(message: str) -> Decision:
     return Decision(DEFAULT_RULE.name, DEFAULT_RULE.model, DEFAULT_RULE.reason)
 
 
-def fallback_models(failed_model: str) -> list[str]:
+def fallback_models(category: str, failed_model: str) -> list[str]:
+    """Modelos de respaldo para una categoría.
+
+    Privacidad: si la categoría es "procesamiento_privado" NO hay respaldo (lista vacía).
+    Reenviar el texto sensible a un proveedor externo anularía la regla 10; es preferible
+    un error 502 controlado. (Excepción explícita a "el respaldo nunca es vacío".)
+    """
+    if category == PRIVATE_CATEGORY:
+        return []
     return [m for m in FALLBACK_ORDER if m != failed_model]

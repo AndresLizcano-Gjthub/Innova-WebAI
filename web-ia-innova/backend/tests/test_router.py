@@ -32,8 +32,12 @@ class TestRouter(unittest.TestCase):
         self.assertEqual(first, choose_route(msg))
 
     def test_fallback_excluye_modelo_fallido(self):
-        self.assertNotIn(TERRA, fallback_models(TERRA))
-        self.assertTrue(len(fallback_models(SOL)) > 0)
+        self.assertNotIn(TERRA, fallback_models("general", TERRA))
+        self.assertTrue(len(fallback_models("razonamiento_complejo", SOL)) > 0)
+
+    def test_fallback_orden_exacto(self):
+        self.assertEqual(fallback_models("general", TERRA), [CLAUDE, NEMOTRON])
+        self.assertEqual(fallback_models("razonamiento_complejo", SOL), [TERRA, CLAUDE, NEMOTRON])
 
 
 class TestNormalizacion(unittest.TestCase):
@@ -116,6 +120,36 @@ class TestVocabularioPrivado(unittest.TestCase):
 
     def test_palabra_parecida_no_activa(self):
         self.assertFalse(self._es_privado("Hablemos de la sensibilidad del sensor"))
+
+
+class TestFallbackPrivado(unittest.TestCase):
+    """R-01: lo privado NUNCA se reenvía a un proveedor externo como respaldo."""
+
+    def test_fallback_de_categoria_privada_es_vacio(self):
+        self.assertEqual(fallback_models("procesamiento_privado", NEMOTRON), [])
+
+    def test_privado_sin_externos_aunque_falle_otro_modelo(self):
+        for externo in (TERRA, CLAUDE, SOL, LUNA):
+            self.assertNotIn(externo, fallback_models("procesamiento_privado", NEMOTRON))
+
+    def test_flujo_privado_que_falla_termina_en_502_sin_reenviar(self):
+        from unittest.mock import MagicMock, patch
+
+        from fastapi import HTTPException
+
+        from app.main import orchestrate
+        from app.providers import ProviderError
+        from app.schemas import OrchestrateRequest
+
+        proveedor = MagicMock()
+        proveedor.generate.side_effect = ProviderError("caído")
+        with patch("app.main.get_provider", return_value=proveedor):
+            with self.assertRaises(HTTPException) as ctx:
+                orchestrate(OrchestrateRequest(message="Resume este texto confidencial de nómina"))
+        self.assertEqual(ctx.exception.status_code, 502)
+        # Solo se intentó el modelo controlado: el texto no salió a ningún otro proveedor.
+        self.assertEqual(proveedor.generate.call_count, 1)
+        self.assertEqual(proveedor.generate.call_args.args[0], NEMOTRON)
 
 
 if __name__ == "__main__":
