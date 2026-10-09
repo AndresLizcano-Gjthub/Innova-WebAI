@@ -1,7 +1,8 @@
 """Casos mínimos del informe (sección 16.1). Se ejecutan con: python -m unittest -v"""
 import unittest
 
-from app.router import CLAUDE, LUNA, NEMOTRON, SOL, TERRA, choose_route, fallback_models
+from app.router import (CLAUDE, LONG_CONTEXT_CHARS, LUNA, NEMOTRON, RULES, SHORT_TASK_CHARS, SOL, TERRA,
+                        choose_route, fallback_models)
 
 
 class TestRouter(unittest.TestCase):
@@ -150,6 +151,46 @@ class TestFallbackPrivado(unittest.TestCase):
         # Solo se intentó el modelo controlado: el texto no salió a ningún otro proveedor.
         self.assertEqual(proveedor.generate.call_count, 1)
         self.assertEqual(proveedor.generate.call_args.args[0], NEMOTRON)
+
+
+class TestBordesYCategorias(unittest.TestCase):
+    """Q-03 / R-06: bordes de longitud, categoría por regla, precedencias y prioridades."""
+
+    def test_borde_tarea_breve(self):
+        self.assertEqual(choose_route("x" * (SHORT_TASK_CHARS - 1)).category, "tarea_breve")
+        self.assertEqual(choose_route("x" * SHORT_TASK_CHARS).category, "general")
+
+    def test_borde_contexto_extenso(self):
+        self.assertEqual(choose_route("x" * LONG_CONTEXT_CHARS).category, "general")
+        self.assertEqual(choose_route("x" * (LONG_CONTEXT_CHARS + 1)).category, "contexto_extenso")
+
+    def test_general_va_a_terra(self):
+        d = choose_route("x" * 300)
+        self.assertEqual((d.category, d.model), ("general", TERRA))
+
+    def test_categoria_por_regla_aislada(self):
+        casos = {
+            "procesamiento_privado": "Esto es confidencial",
+            "trabajo_masivo": _largo("Procesa miles de registros"),
+            "razonamiento_complejo": _largo("Revisa la arquitectura"),
+            "contexto_extenso": _largo("Mira el repositorio"),
+            "automatizacion_cotidiana": _largo("Escribe un script"),
+        }
+        for categoria, msg in casos.items():
+            with self.subTest(categoria=categoria):
+                self.assertEqual(choose_route(msg).category, categoria)
+
+    def test_privado_gana_incluso_con_contexto_largo(self):
+        self.assertEqual(choose_route("x" * 9000 + " confidencial").category, "procesamiento_privado")
+
+    def test_masivo_gana_a_automatizacion(self):
+        self.assertEqual(choose_route(_largo("Procesa este lote con una api")).category, "trabajo_masivo")
+
+    def test_prioridades_son_unicas(self):
+        self.assertEqual(len({r.priority for r in RULES}), len(RULES))
+
+    def test_resultado_es_determinista_ante_mayusculas(self):
+        self.assertEqual(choose_route(_largo("PROCESA ESTE LOTE")).category, "trabajo_masivo")
 
 
 if __name__ == "__main__":

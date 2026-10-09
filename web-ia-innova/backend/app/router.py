@@ -96,6 +96,9 @@ RULES: list[Rule] = [
          lambda m: len(m) < SHORT_TASK_CHARS),
 ]
 
+# Se ordena una sola vez al cargar el módulo (como un static final), no en cada llamada.
+_RULES_ORDENADAS = sorted(RULES, key=lambda r: r.priority)
+
 DEFAULT_RULE = Rule(999, "general", TERRA, "Sin regla específica: modelo por defecto", lambda m: True)
 
 
@@ -108,7 +111,7 @@ class Decision:
 
 def choose_route(message: str) -> Decision:
     """Devuelve la decisión de la primera regla (por prioridad) que coincida."""
-    for rule in sorted(RULES, key=lambda r: r.priority):
+    for rule in _RULES_ORDENADAS:
         if rule.matches(message):
             return Decision(rule.name, rule.model, rule.reason)
     return Decision(DEFAULT_RULE.name, DEFAULT_RULE.model, DEFAULT_RULE.reason)
