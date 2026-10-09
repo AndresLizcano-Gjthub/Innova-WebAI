@@ -10,7 +10,7 @@ const plex = IBM_Plex_Sans({
 
 export const metadata: Metadata = {
   title: "Web IA INNOVA",
-  description: "Plataforma multimodelo con orquestador de IA — grupo INNOVA",
+  description: "Prototipo de interfaz multimodelo del grupo INNOVA. Las respuestas son simuladas.",
 };
 
 export const viewport: Viewport = {
