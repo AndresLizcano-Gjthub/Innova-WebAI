@@ -7,8 +7,10 @@ Así, si dos reglas se contradicen, el resultado es siempre el mismo (determinis
 PENDIENTE: los nombres de modelo son los del informe y deben validarse
 contra los proveedores reales antes de usarlos en producción.
 """
+import re
 import unicodedata
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable
 
 # Nombres lógicos de modelos (según el informe)
@@ -44,9 +46,22 @@ def _normalize(text: str) -> str:
     return "".join(c for c in descompuesto if not unicodedata.combining(c)).casefold()
 
 
+@lru_cache(maxsize=None)
+def _patron(word: str) -> re.Pattern[str]:
+    """Compila (una sola vez) la palabra clave como regex de PALABRA COMPLETA.
+
+    - "lote"       -> acepta "lote" y "lotes", pero NO "pilote" ni "lotería".
+    - "automatiz*" -> prefijo explícito: acepta automatizar, automatiza, automatización...
+    Analogía Java: Pattern.compile("\\blote(?:e?s)?\\b"), cacheado como un static final.
+    """
+    if word.endswith("*"):
+        return re.compile(rf"\b{re.escape(_normalize(word[:-1]))}\w*")
+    return re.compile(rf"\b{re.escape(_normalize(word))}(?:e?s)?\b")
+
+
 def _has(text: str, words: list[str]) -> bool:
     t = _normalize(text)
-    return any(_normalize(w) in t for w in words)
+    return any(_patron(w).search(t) for w in words)
 
 
 RULES: list[Rule] = [
@@ -59,13 +74,13 @@ RULES: list[Rule] = [
          lambda m: _has(m, ["miles de registros", "lote", "procesar todos los documentos"])),
     Rule(30, "razonamiento_complejo", SOL,
          "Tarea de alta dificultad o riesgo",
-         lambda m: _has(m, ["arquitectura", "depurar", "error intermitente", "concurrencia", "auditar", "revisión crítica"])),
+         lambda m: _has(m, ["arquitectura", "depur*", "error intermitente", "concurrencia", "audit*", "revisión crítica"])),
     Rule(40, "contexto_extenso", CLAUDE,
          "Código o contexto extenso",
-         lambda m: len(m) > LONG_CONTEXT_CHARS or _has(m, ["repositorio", "refactoriza", "revisa este código", "revisa esta función"])),
+         lambda m: len(m) > LONG_CONTEXT_CHARS or _has(m, ["repositorio", "refactoriz*", "revisa este código", "revisa esta función"])),
     Rule(50, "automatizacion_cotidiana", TERRA,
          "Tarea normal y variada",
-         lambda m: _has(m, ["script", "automatiza", "informe", "correo", "redacta", "api"])),
+         lambda m: _has(m, ["script", "automatiz*", "informe", "correo", "redact*", "api"])),
     Rule(60, "tarea_breve", LUNA,
          "Tarea sencilla que exige rapidez",
          lambda m: len(m) < SHORT_TASK_CHARS),

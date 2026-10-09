@@ -49,5 +49,37 @@ class TestNormalizacion(unittest.TestCase):
         self.assertEqual(choose_route("INFORMACIÓN PRIVADA del cliente").category, "procesamiento_privado")
 
 
+def _largo(texto: str) -> str:
+    """Rellena con palabras neutras hasta pasar SHORT_TASK_CHARS, para que no gane 'tarea_breve'."""
+    return texto + " " + "texto neutro " * 20
+
+
+class TestPalabraCompleta(unittest.TestCase):
+    """R-03: una palabra clave solo cuenta si es una palabra completa, no un trozo de otra."""
+
+    def test_capital_no_activa_api(self):
+        self.assertEqual(choose_route(_largo("¿Cuál es la capital de Francia?")).category, "general")
+
+    def test_terapia_y_rapidez_no_activan_api(self):
+        self.assertEqual(choose_route(_largo("hablemos de terapia y rapidez")).category, "general")
+
+    def test_pilote_no_activa_lote(self):
+        self.assertEqual(choose_route(_largo("El pilote de cimentación del puente")).category, "general")
+
+    def test_loteria_no_activa_lote(self):
+        self.assertEqual(choose_route(_largo("Resultados de la lotería de hoy")).category, "general")
+
+    def test_pilote_no_le_gana_a_depurar(self):
+        self.assertEqual(choose_route(_largo("Quiero depurar el pilote")).category, "razonamiento_complejo")
+
+    def test_plurales_siguen_coincidiendo(self):
+        self.assertEqual(choose_route(_largo("Procesa estos lotes de facturas")).category, "trabajo_masivo")
+        self.assertEqual(choose_route(_largo("Documenta estas apis internas")).category, "automatizacion_cotidiana")
+
+    def test_verbos_conjugados_siguen_coincidiendo(self):
+        self.assertEqual(choose_route(_largo("Quiero automatizar esta tarea")).category, "automatizacion_cotidiana")
+        self.assertEqual(choose_route(_largo("Redactar un mensaje formal")).category, "automatizacion_cotidiana")
+
+
 if __name__ == "__main__":
     unittest.main()
