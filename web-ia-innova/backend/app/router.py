@@ -38,14 +38,23 @@ class Rule:
     matches: Callable[[str], bool]
 
 
+@lru_cache(maxsize=4)  # Una petición normaliza el mismo texto en varias reglas: se calcula una vez.
 def _normalize(text: str) -> str:
     """Quita tildes y pasa a minúsculas ("Información" -> "informacion").
 
     Analogía Java: como Normalizer.normalize(s, Form.NFD) + replaceAll("\\p{M}", "").
     Sin esto, "informacion privada" (sin tilde) se escaparía de la regla de privacidad.
     """
-    descompuesto = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in descompuesto if not unicodedata.combining(c)).casefold()
+    # casefold ANTES de NFKD; luego se descartan las tildes (combinantes) y los caracteres
+    # invisibles de formato (categoría Cf: guion suave, ancho cero...) que trae el texto pegado
+    # de PDF/Word y que partirían una palabra clave. "_" cuenta como separador, y los espacios,
+    # saltos de línea y tabs se colapsan en un solo espacio para que las frases coincidan.
+    descompuesto = unicodedata.normalize("NFKD", text.casefold())
+    limpio = "".join(
+        c for c in descompuesto
+        if not unicodedata.combining(c) and unicodedata.category(c) != "Cf"
+    )
+    return re.sub(r"[\s_]+", " ", limpio)
 
 
 @lru_cache(maxsize=None)
@@ -69,8 +78,9 @@ def _has(text: str, words: list[str]) -> bool:
 # Vocabulario de la regla 10. Se compara sin tildes y por palabra completa (plural incluido).
 # Ante la duda se prefiere la ruta controlada: un falso positivo es seguro, un falso negativo no.
 PALABRAS_PRIVADAS = [
-    "confidencial", "sensible", "datos sensibles", "información privada", "datos privados",
-    "no debe salir", "contraseña", "historia clínica", "historias clínicas", "cédula",
+    # Con "*" = prefijo: cubre derivados (confidencialidad, confidencialmente, contraseña123).
+    "confidencial*", "sensible", "datos sensibles", "información privada", "datos privados",
+    "no debe salir", "contraseñ*", "credencial*", "historia clínica", "historias clínicas", "cédula",
     "número de cuenta", "números de cuenta", "nómina",
 ]
 

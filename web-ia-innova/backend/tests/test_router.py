@@ -193,5 +193,37 @@ class TestBordesYCategorias(unittest.TestCase):
         self.assertEqual(choose_route(_largo("PROCESA ESTE LOTE")).category, "trabajo_masivo")
 
 
+class TestRobustezPrivacidad(unittest.TestCase):
+    """Auditoría de seguridad: texto pegado de PDF/Word y derivados no deben saltarse la regla 10."""
+
+    def _es_privado(self, frase: str) -> bool:
+        return choose_route(_largo(frase)).category == "procesamiento_privado"
+
+    def test_guion_suave_dentro_de_la_palabra(self):
+        self.assertTrue(self._es_privado("Esto es confi" + chr(0xAD) + "dencial"))
+
+    def test_caracteres_de_ancho_cero(self):
+        for codigo in (0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF):
+            with self.subTest(codigo=hex(codigo)):
+                self.assertTrue(self._es_privado("Esto es confi" + chr(codigo) + "dencial"))
+
+    def test_saltos_de_linea_tabs_y_dobles_espacios_en_frases(self):
+        salto, tab = chr(10), chr(9)
+        self.assertTrue(self._es_privado("Resume la historia" + salto + "clinica"))
+        self.assertTrue(self._es_privado("Mi numero" + tab + "de cuenta"))
+        self.assertTrue(self._es_privado("Mira la informacion  privada"))
+
+    def test_derivados_de_confidencial(self):
+        self.assertTrue(self._es_privado("Hablemos de la confidencialidad del cliente"))
+        self.assertTrue(self._es_privado("Te lo digo confidencialmente"))
+
+    def test_contrasena_pegada_a_guion_bajo_o_digitos(self):
+        self.assertTrue(self._es_privado("mi_contraseña es x"))
+        self.assertTrue(self._es_privado("contraseña123"))
+
+    def test_credenciales(self):
+        self.assertTrue(self._es_privado("Estas son mis credenciales de acceso"))
+
+
 if __name__ == "__main__":
     unittest.main()
