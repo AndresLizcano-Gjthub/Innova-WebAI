@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 # Logs sin buffer y sin archivos .pyc dentro de la imagen
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 APP_ENV=production
 
 # Usuario sin privilegios (UID 1000, el que recomienda Hugging Face Spaces).
 # Analogía Java: no ejecutar la aplicación como root, igual que no correr Tomcat como administrador.

@@ -2,13 +2,22 @@ import logging
 import os
 import time
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.providers import ProviderError, get_provider
-from app.router import PRIVATE_CATEGORY, choose_route, fallback_models
+from app.gestora import get_classifier, gestora_status
+from app.router import PRIVATE_CATEGORY, decide, fallback_models
 from app.schemas import OrchestrateRequest, OrchestrateResponse
+
+# Solo en DESARROLLO se carga backend/.env (donde vive GEMINI_API_KEY). En producción las variables
+# vienen del hosting (Secrets), y en las pruebas APP_ENV=test evita leer el .env real.
+if os.getenv("APP_ENV", "").strip().lower() not in ("production", "test"):
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("orchestrator")
@@ -21,7 +30,8 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["POST",
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "provider_mode": os.getenv("PROVIDER_MODE", "mock")}
+    # gestora_status() informa el modo efectivo y SI hay clave (true/false), nunca la clave.
+    return {"status": "ok", "provider_mode": os.getenv("PROVIDER_MODE", "mock"), **gestora_status()}
 
 
 @app.post("/orchestrate", response_model=OrchestrateResponse)
@@ -31,7 +41,7 @@ def orchestrate(req: OrchestrateRequest):
     provider = get_provider()
     is_mock = os.getenv("PROVIDER_MODE", "mock").lower() != "real"
 
-    decision = choose_route(req.message)
+    decision = decide(req.message, get_classifier())
     model, reason, fallback_used = decision.model, decision.reason, False
 
     # P-02, fallo cerrado: en modo real, lo privado solo va a una ruta privada CONFIGURADA
@@ -62,10 +72,11 @@ def orchestrate(req: OrchestrateRequest):
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     # Registro de la decisión (el contenido del usuario NO se guarda en logs).
-    log.info("req=%s category=%s model=%s fallback=%s latency_ms=%s",
-             request_id, decision.category, model, fallback_used, latency_ms)
+    log.info("req=%s category=%s decided_by=%s model=%s fallback=%s latency_ms=%s",
+             request_id, decision.category, decision.decided_by, model, fallback_used, latency_ms)
 
     return OrchestrateResponse(
         request_id=request_id, content=content, model=model, category=decision.category,
         reason=reason, latency_ms=latency_ms, fallback_used=fallback_used, is_mock=is_mock,
+        decided_by=decision.decided_by,
     )

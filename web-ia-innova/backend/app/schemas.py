@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # Límite del mensaje. Debe ser mayor que LONG_CONTEXT_CHARS (8000) del router,
@@ -22,3 +24,5 @@ class OrchestrateResponse(BaseModel):
     latency_ms: int
     fallback_used: bool = False
     is_mock: bool = False
+    # Quién decidió la ruta: reglas, IA Gestora (Gemini clasificó) o reglas porque Gemini falló.
+    decided_by: Literal["regla", "gestora_llm", "regla_respaldo"] = "regla"
