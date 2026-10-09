@@ -64,11 +64,19 @@ def _has(text: str, words: list[str]) -> bool:
     return any(_patron(w).search(t) for w in words)
 
 
+# Vocabulario de la regla 10. Se compara sin tildes y por palabra completa (plural incluido).
+# Ante la duda se prefiere la ruta controlada: un falso positivo es seguro, un falso negativo no.
+PALABRAS_PRIVADAS = [
+    "confidencial", "sensible", "datos sensibles", "información privada", "datos privados",
+    "no debe salir", "contraseña", "historia clínica", "historias clínicas", "cédula",
+    "número de cuenta", "números de cuenta", "nómina",
+]
+
 RULES: list[Rule] = [
     # Privacidad primero: lo sensible no debe salir a proveedores externos.
     Rule(10, "procesamiento_privado", NEMOTRON,
          "Contenido sensible o privado: ruta controlada",
-         lambda m: _has(m, ["confidencial", "datos sensibles", "información privada", "no debe salir"])),
+         lambda m: _has(m, PALABRAS_PRIVADAS)),
     Rule(20, "trabajo_masivo", NEMOTRON,
          "Gran volumen de datos: ruta económica",
          lambda m: _has(m, ["miles de registros", "lote", "procesar todos los documentos"])),

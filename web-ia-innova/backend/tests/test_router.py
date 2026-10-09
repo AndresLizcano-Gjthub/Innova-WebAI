@@ -81,5 +81,42 @@ class TestPalabraCompleta(unittest.TestCase):
         self.assertEqual(choose_route(_largo("Redactar un mensaje formal")).category, "automatizacion_cotidiana")
 
 
+class TestVocabularioPrivado(unittest.TestCase):
+    """R-07: términos que deben activar la regla 10 (procesamiento_privado), uno por prueba."""
+
+    def _es_privado(self, frase: str) -> bool:
+        return choose_route(_largo(frase)).category == "procesamiento_privado"
+
+    def test_sensible(self):
+        self.assertTrue(self._es_privado("Este dato es sensible"))
+
+    def test_datos_privados(self):
+        self.assertTrue(self._es_privado("Revisa los datos privados del cliente"))
+
+    def test_contrasena(self):
+        self.assertTrue(self._es_privado("Mi contraseña es 1234"))
+        self.assertTrue(self._es_privado("Mi contrasena es 1234"))
+
+    def test_historia_clinica(self):
+        self.assertTrue(self._es_privado("Resume la historia clínica del paciente"))
+        self.assertTrue(self._es_privado("Resume las historias clinicas"))
+
+    def test_cedula(self):
+        self.assertTrue(self._es_privado("Mi cédula es 123456"))
+
+    def test_numero_de_cuenta(self):
+        self.assertTrue(self._es_privado("Mi número de cuenta es 998877"))
+
+    def test_nomina(self):
+        self.assertTrue(self._es_privado("Resume esta nómina"))
+
+    def test_falso_positivo_cae_en_ruta_privada(self):
+        # Decisión de diseño: ante la duda se prefiere la ruta controlada (conservador).
+        self.assertTrue(self._es_privado("Esto NO es confidencial, es una consulta pública"))
+
+    def test_palabra_parecida_no_activa(self):
+        self.assertFalse(self._es_privado("Hablemos de la sensibilidad del sensor"))
+
+
 if __name__ == "__main__":
     unittest.main()
