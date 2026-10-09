@@ -16,7 +16,7 @@ log = logging.getLogger("orchestrator")
 app = FastAPI(title="IA Gestora / Orquestadora — Web IA INNOVA", version="0.1.0")
 
 origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["POST", "GET"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["POST", "GET"], allow_headers=["Content-Type", "Authorization"])
 
 
 @app.get("/health")
