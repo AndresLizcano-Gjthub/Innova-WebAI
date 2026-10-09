@@ -38,6 +38,56 @@ class Rule:
     matches: Callable[[str], bool]
 
 
+# Letras cirílicas y griegas que se ven como una letra latina (código Unicode -> letra latina).
+# Tabla corta a propósito (no es la lista UTS #39 completa). Las claves están en minúscula
+# porque el texto ya pasó por casefold(). Se usan códigos numéricos para que no haya dudas
+# sobre qué letra es cuál.
+_CONFUNDIBLES = {
+    # Cirílico: а е о р с х у і ј к м н т в
+    0x0430: "a", 0x0435: "e", 0x043E: "o", 0x0440: "p", 0x0441: "c", 0x0445: "x", 0x0443: "y",
+    0x0456: "i", 0x0458: "j", 0x043A: "k", 0x043C: "m", 0x043D: "h", 0x0442: "t", 0x0432: "b",
+    # Griego: ο α ε ι κ ν ρ τ υ χ
+    0x03BF: "o", 0x03B1: "a", 0x03B5: "e", 0x03B9: "i", 0x03BA: "k", 0x03BD: "v", 0x03C1: "p",
+    0x03C4: "t", 0x03C5: "u", 0x03C7: "x",
+}
+
+
+def _escrituras(palabra: str) -> set[str]:
+    """Escrituras (LATIN / CYRILLIC / GREEK) de las letras de una palabra."""
+    encontradas = set()
+    for c in palabra:
+        nombre = unicodedata.name(c, "")
+        for escritura in ("LATIN", "CYRILLIC", "GREEK"):
+            if nombre.startswith(escritura):
+                encontradas.add(escritura)
+    return encontradas
+
+
+def _es_mixta(palabra: str) -> bool:
+    """True si la palabra mezcla latín con cirílico o griego (hay confusión posible)."""
+    escrituras = _escrituras(palabra)
+    return "LATIN" in escrituras and len(escrituras) > 1
+
+
+def _desconfundir(coincidencia: re.Match[str]) -> str:
+    """Convierte a latín SOLO las palabras mixtas; el ruso o el griego normales no se tocan."""
+    palabra = coincidencia.group(0)
+    return palabra.translate(_CONFUNDIBLES) if _es_mixta(palabra) else palabra
+
+
+@lru_cache(maxsize=4)
+def _limpiar(text: str) -> str:
+    """Minúsculas, sin caracteres invisibles de formato y sin tildes (aún sin colapsar espacios).
+
+    Se quitan primero los caracteres de formato Unicode (categoría Cf: guion suave U+00AD,
+    ancho cero U+200B/C/D, BOM U+FEFF...) que trae el texto pegado de PDF/Word y que partirían
+    una palabra clave. Luego NFKD separa las tildes (marcas combinantes) y se descartan.
+    """
+    plegado = "".join(c for c in text.casefold() if unicodedata.category(c) != "Cf")
+    descompuesto = unicodedata.normalize("NFKD", plegado)
+    return "".join(c for c in descompuesto if not unicodedata.combining(c))
+
+
 @lru_cache(maxsize=4)  # Una petición normaliza el mismo texto en varias reglas: se calcula una vez.
 def _normalize(text: str) -> str:
     """Quita tildes y pasa a minúsculas ("Información" -> "informacion").
@@ -45,16 +95,23 @@ def _normalize(text: str) -> str:
     Analogía Java: como Normalizer.normalize(s, Form.NFD) + replaceAll("\\p{M}", "").
     Sin esto, "informacion privada" (sin tilde) se escaparía de la regla de privacidad.
     """
-    # casefold ANTES de NFKD; luego se descartan las tildes (combinantes) y los caracteres
-    # invisibles de formato (categoría Cf: guion suave, ancho cero...) que trae el texto pegado
-    # de PDF/Word y que partirían una palabra clave. "_" cuenta como separador, y los espacios,
-    # saltos de línea y tabs se colapsan en un solo espacio para que las frases coincidan.
-    descompuesto = unicodedata.normalize("NFKD", text.casefold())
-    limpio = "".join(
-        c for c in descompuesto
-        if not unicodedata.combining(c) and unicodedata.category(c) != "Cf"
-    )
+    limpio = _limpiar(text)
+    # Las palabras que mezclan escrituras se "desconfunden" a latín (ver _CONFUNDIBLES).
+    limpio = re.sub(r"[^\W\d_]+", _desconfundir, limpio)
+    # "_" cuenta como separador, y los espacios, saltos de línea y tabs se colapsan en uno
+    # solo, para que las frases clave coincidan aunque vengan partidas.
     return re.sub(r"[\s_]+", " ", limpio)
+
+
+@lru_cache(maxsize=4)
+def _hay_palabra_mixta(text: str) -> bool:
+    """True si ALGUNA palabra mezcla letras latinas con cirílicas o griegas (P-01).
+
+    Es la huella de un homoglifo ("cоnfidencial" con una 'о' cirílica). Falla seguro: la regla 10
+    la trata como privada. Un mensaje normal en ruso NO cuenta: ahí cada palabra es de una
+    sola escritura. Tampoco cuenta mezclar escrituras entre palabras distintas.
+    """
+    return any(_es_mixta(w) for w in re.findall(r"[^\W\d_]+", _limpiar(text)))
 
 
 @lru_cache(maxsize=None)
@@ -88,7 +145,7 @@ RULES: list[Rule] = [
     # Privacidad primero: lo sensible no debe salir a proveedores externos.
     Rule(10, PRIVATE_CATEGORY, NEMOTRON,
          "Contenido sensible o privado: ruta controlada",
-         lambda m: _has(m, PALABRAS_PRIVADAS)),
+         lambda m: _hay_palabra_mixta(m) or _has(m, PALABRAS_PRIVADAS)),
     Rule(20, "trabajo_masivo", NEMOTRON,
          "Gran volumen de datos: ruta económica",
          lambda m: _has(m, ["miles de registros", "lote", "procesar todos los documentos"])),

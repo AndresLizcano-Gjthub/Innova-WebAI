@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.providers import ProviderError, get_provider
-from app.router import choose_route, fallback_models
+from app.router import PRIVATE_CATEGORY, choose_route, fallback_models
 from app.schemas import OrchestrateRequest, OrchestrateResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +33,13 @@ def orchestrate(req: OrchestrateRequest):
 
     decision = choose_route(req.message)
     model, reason, fallback_used = decision.model, decision.reason, False
+
+    # P-02, fallo cerrado: en modo real, lo privado solo va a una ruta privada CONFIGURADA
+    # (PRIVATE_ROUTE_URL). Sin ella NO se llama a ningún proveedor, para no enviar texto
+    # sensible a un tercero por accidente. En modo mock no hace falta (no sale nada).
+    if decision.category == PRIVATE_CATEGORY and not is_mock and not os.getenv("PRIVATE_ROUTE_URL"):
+        log.warning("req=%s category=%s ruta privada no configurada: 503", request_id, decision.category)
+        raise HTTPException(status_code=503, detail="Ruta privada no disponible todavía")
 
     try:
         content = provider.generate(model, req.message)

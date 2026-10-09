@@ -225,5 +225,84 @@ class TestRobustezPrivacidad(unittest.TestCase):
         self.assertTrue(self._es_privado("Estas son mis credenciales de acceso"))
 
 
+class TestHomoglifos(unittest.TestCase):
+    """P-01: letras cirílicas/griegas que imitan letras latinas no deben esquivar la regla 10."""
+
+    def _categoria(self, frase: str) -> str:
+        return choose_route(_largo(frase)).category
+
+    def test_o_cirilica_dentro_de_confidencial(self):
+        self.assertEqual(self._categoria("Esto es c" + chr(0x43E) + "nfidencial"), "procesamiento_privado")
+
+    def test_o_griega_dentro_de_confidencial(self):
+        self.assertEqual(self._categoria("Esto es c" + chr(0x3BF) + "nfidencial"), "procesamiento_privado")
+
+    def test_mayuscula_cirilica_dentro_de_palabra_latina(self):
+        self.assertEqual(self._categoria("Esto es C" + chr(0x41E) + "NFIDENCIAL"), "procesamiento_privado")
+
+    def test_palabra_mixta_cualquiera_falla_seguro(self):
+        # Una palabra que mezcla escrituras es sospechosa aunque no sea una palabra clave.
+        self.assertEqual(self._categoria("Hola ma" + chr(0x440) + "ana"), "procesamiento_privado")
+
+    def test_guion_suave_y_ancho_cero_siguen_detectandose(self):
+        self.assertEqual(self._categoria("confi" + chr(0x200B) + "dencial"), "procesamiento_privado")
+
+    def test_mensaje_normal_en_ruso_no_es_privado(self):
+        ruso = "".join(chr(c) for c in (
+            0x41F, 0x440, 0x438, 0x432, 0x435, 0x442, 0x2C, 0x20, 0x43A, 0x430, 0x43A, 0x20,
+            0x434, 0x435, 0x43B, 0x430, 0x3F))  # "Привет, как дела?"
+        self.assertNotEqual(choose_route(ruso).category, "procesamiento_privado")
+        self.assertNotEqual(self._categoria(ruso + " " + ruso), "procesamiento_privado")
+
+    def test_escrituras_distintas_en_palabras_distintas_no_son_privado(self):
+        ruso = "".join(chr(c) for c in (0x43A, 0x430, 0x43A, 0x20, 0x434, 0x435, 0x43B, 0x430))  # "как дела"
+        self.assertNotEqual(self._categoria("Hola " + ruso + " amigos"), "procesamiento_privado")
+
+
+class TestRutaPrivadaFalloCerrado(unittest.TestCase):
+    """P-02: en modo real, sin PRIVATE_ROUTE_URL lo privado responde 503 y NO llama a ningún proveedor."""
+
+    def _llamar(self, entorno: dict, mensaje: str = "Resume este texto confidencial"):
+        import os
+        from unittest.mock import MagicMock, patch
+
+        from app.main import orchestrate
+        from app.schemas import OrchestrateRequest
+
+        proveedor = MagicMock()
+        proveedor.generate.return_value = "ok"
+        with patch.dict(os.environ, entorno):
+            if "PRIVATE_ROUTE_URL" not in entorno:
+                os.environ.pop("PRIVATE_ROUTE_URL", None)
+            with patch("app.main.get_provider", return_value=proveedor):
+                try:
+                    resp = orchestrate(OrchestrateRequest(message=mensaje))
+                except Exception as exc:  # HTTPException
+                    return proveedor, exc
+        return proveedor, resp
+
+    def test_real_sin_ruta_privada_da_503_y_no_llama_a_nadie(self):
+        from fastapi import HTTPException
+
+        proveedor, resultado = self._llamar({"PROVIDER_MODE": "real"})
+        self.assertIsInstance(resultado, HTTPException)
+        self.assertEqual(resultado.status_code, 503)
+        self.assertEqual(resultado.detail, "Ruta privada no disponible todavía")
+        proveedor.generate.assert_not_called()
+
+    def test_real_con_ruta_privada_configurada_si_llama(self):
+        proveedor, resultado = self._llamar({"PROVIDER_MODE": "real", "PRIVATE_ROUTE_URL": "https://privado.example"})
+        self.assertEqual(resultado.category, "procesamiento_privado")
+        self.assertEqual(proveedor.generate.call_args.args[0], NEMOTRON)
+
+    def test_mock_no_exige_ruta_privada(self):
+        proveedor, resultado = self._llamar({"PROVIDER_MODE": "mock"})
+        self.assertTrue(resultado.is_mock)
+
+    def test_real_sin_ruta_privada_no_afecta_a_lo_no_privado(self):
+        proveedor, resultado = self._llamar({"PROVIDER_MODE": "real"}, mensaje="Hola, ¿qué hora es?")
+        self.assertEqual(resultado.category, "tarea_breve")
+
+
 if __name__ == "__main__":
     unittest.main()
