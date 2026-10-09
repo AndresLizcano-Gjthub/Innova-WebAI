@@ -165,13 +165,30 @@ PALABRAS_PRIVADAS = [
     "confidencial*", "sensible", "datos sensibles", "información privada", "datos privados",
     "no debe salir", "contraseñ*", "credencial*", "historia clínica", "historias clínicas", "cédula",
     "número de cuenta", "números de cuenta", "nómina",
+    # Auditoría Fase 6: palabras en español e inglés que antes llegaban a Gemini.
+    "clave", "password*", "confidential*", "diagnóstico*", "salario*", "iban", "pasaporte", "dni",
+    "tarjeta de crédito", "tarjetas de crédito",
 ]
+
+# Datos personales por PATRÓN (no por palabra). Falla seguro: ante la duda se trata como privado.
+# - correo electrónico
+# - 9 o más dígitos seguidos (teléfono, documento, cuenta, IBAN, tarjeta), con un espacio o guion
+#   opcional entre dígitos. No se valida Luhn: cualquier secuencia larga se considera sensible.
+# Los cuantificadores están ACOTADOS a propósito: con "+" sin tope, una cadena larga sin "@" haría que el
+# motor reintentara desde cada posición (coste cuadrático: 4 s con 32.000 caracteres, un vector de DoS).
+_PATRON_CORREO = re.compile(r"[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{1,63}")
+_PATRON_DIGITOS_LARGOS = re.compile(r"\d(?:[ -]?\d){8,}")
+
+
+def _tiene_dato_personal(text: str) -> bool:
+    t = _normalize(text)
+    return bool(_PATRON_CORREO.search(t) or _PATRON_DIGITOS_LARGOS.search(t))
 
 RULES: list[Rule] = [
     # Privacidad primero: lo sensible no debe salir a proveedores externos.
     Rule(10, PRIVATE_CATEGORY, NEMOTRON,
          "Contenido sensible o privado: ruta controlada",
-         lambda m: _hay_palabra_mixta(m) or _has(m, PALABRAS_PRIVADAS)),
+         lambda m: _hay_palabra_mixta(m) or _tiene_dato_personal(m) or _has(m, PALABRAS_PRIVADAS)),
     Rule(20, "trabajo_masivo", NEMOTRON,
          "Gran volumen de datos: ruta económica",
          lambda m: _has(m, ["miles de registros", "lote", "procesar todos los documentos"])),

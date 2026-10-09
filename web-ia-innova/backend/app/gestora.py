@@ -17,6 +17,7 @@ import os
 import re
 import threading
 import time
+from collections import deque
 from functools import lru_cache
 from typing import Callable, Optional, Protocol
 
@@ -40,6 +41,9 @@ DEFAULT_TIMEOUT_S = 4.0
 MAX_INPUT_CHARS = 2000
 BREAKER_SECONDS = 60.0
 BREAKER_FAILURES = 3
+# Tope LOCAL de llamadas por minuto (conservador y configurable con GESTORA_MAX_CALLS_PER_MIN): evita que
+# un cliente anónimo agote la cuota de Gemini. El cortacircuitos por 429 solo reacciona cuando ya se agotó.
+DEFAULT_MAX_CALLS_PER_MIN = 15
 API_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 
 INICIO, FIN = "<<<INICIO>>>", "<<<FIN>>>"
@@ -93,6 +97,7 @@ class GeminiClassifier:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         client: Optional[httpx.Client] = None,
         clock: Callable[[], float] = time.monotonic,
+        max_calls_per_min: int = DEFAULT_MAX_CALLS_PER_MIN,
     ):
         self._api_key = api_key
         self._model = model
@@ -103,6 +108,20 @@ class GeminiClassifier:
         self._lock = threading.Lock()
         self._abierto_hasta = 0.0
         self._fallos_seguidos = 0
+        self._max_calls_per_min = max_calls_per_min
+        self._marcas_de_llamada: deque[float] = deque()  # instantes de las últimas llamadas
+
+    # --- presupuesto local ----------------------------------------------------------------
+    def _hay_presupuesto(self) -> bool:
+        """Ventana deslizante de 60 s: True (y cuenta la llamada) si aún no se llegó al tope."""
+        with self._lock:
+            ahora = self._clock()
+            while self._marcas_de_llamada and ahora - self._marcas_de_llamada[0] >= 60:
+                self._marcas_de_llamada.popleft()
+            if len(self._marcas_de_llamada) >= self._max_calls_per_min:
+                return False
+            self._marcas_de_llamada.append(ahora)
+            return True
 
     # --- cortacircuitos -------------------------------------------------------------------
     def _circuito_abierto(self) -> bool:
@@ -141,6 +160,9 @@ class GeminiClassifier:
     def classify(self, text: str) -> Optional[str]:
         if self._circuito_abierto():
             log.info("gestora omitida: cortacircuitos abierto model=%s", self._model)
+            return None
+        if not self._hay_presupuesto():
+            log.info("gestora omitida: tope local de llamadas por minuto model=%s", self._model)
             return None
 
         inicio = time.perf_counter()
@@ -205,6 +227,14 @@ def _timeout_from_env() -> float:
     return valor if 0 < valor <= 30 else DEFAULT_TIMEOUT_S
 
 
+def _max_calls_from_env() -> int:
+    try:
+        valor = int(os.getenv("GESTORA_MAX_CALLS_PER_MIN", ""))
+    except ValueError:
+        return DEFAULT_MAX_CALLS_PER_MIN
+    return valor if 1 <= valor <= 1000 else DEFAULT_MAX_CALLS_PER_MIN
+
+
 def gestora_status() -> dict:
     """Estado para /health. NUNCA incluye la clave, solo si existe."""
     hay_clave = bool(os.getenv("GEMINI_API_KEY", "").strip())
@@ -222,4 +252,5 @@ def get_classifier() -> Classifier:
         api_key=os.environ["GEMINI_API_KEY"].strip(),
         model=_model_from_env(),
         timeout_s=_timeout_from_env(),
+        max_calls_per_min=_max_calls_from_env(),
     )

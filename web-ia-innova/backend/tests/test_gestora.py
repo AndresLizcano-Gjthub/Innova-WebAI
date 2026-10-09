@@ -156,6 +156,38 @@ class TestCortacircuitos(unittest.TestCase):
         self.assertEqual(len(llamadas), 6)  # nunca llegó a 3 seguidos
 
 
+class TestPresupuestoLocal(unittest.TestCase):
+    """Fase 6: tope local de llamadas por minuto para que nadie agote la cuota de Gemini."""
+
+    def _con_tope(self, tope, reloj, llamadas):
+        def manejador(req):
+            llamadas.append(1)
+            return _respuesta_ok("general")
+
+        cliente = httpx.Client(transport=httpx.MockTransport(manejador))
+        return GeminiClassifier(api_key=CLAVE, model="m", client=cliente, clock=reloj, max_calls_per_min=tope)
+
+    def test_por_encima_del_tope_no_llama_a_gemini(self):
+        reloj, llamadas = RelojFalso(), []
+        c = self._con_tope(3, reloj, llamadas)
+        resultados = [c.classify("hola") for _ in range(5)]
+        self.assertEqual(len(llamadas), 3)
+        self.assertEqual(resultados, ["general"] * 3 + [None] * 2)
+
+    def test_la_ventana_se_desliza(self):
+        reloj, llamadas = RelojFalso(), []
+        c = self._con_tope(2, reloj, llamadas)
+        c.classify("a"), c.classify("b"), c.classify("c")
+        self.assertEqual(len(llamadas), 2)
+        reloj.t += 61
+        c.classify("d")
+        self.assertEqual(len(llamadas), 3)
+
+    def test_el_tope_por_defecto_existe_y_es_conservador(self):
+        from app.gestora import DEFAULT_MAX_CALLS_PER_MIN
+        self.assertTrue(0 < DEFAULT_MAX_CALLS_PER_MIN <= 30)
+
+
 class TestPrivacidadDeLogs(unittest.TestCase):
     def test_los_logs_no_contienen_texto_respuesta_ni_clave(self):
         secreto = "TEXTO-SECRETO-DEL-USUARIO"
