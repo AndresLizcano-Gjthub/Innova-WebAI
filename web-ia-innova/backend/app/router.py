@@ -7,6 +7,7 @@ Así, si dos reglas se contradicen, el resultado es siempre el mismo (determinis
 PENDIENTE: los nombres de modelo son los del informe y deben validarse
 contra los proveedores reales antes de usarlos en producción.
 """
+import unicodedata
 from dataclasses import dataclass
 from typing import Callable
 
@@ -33,9 +34,19 @@ class Rule:
     matches: Callable[[str], bool]
 
 
+def _normalize(text: str) -> str:
+    """Quita tildes y pasa a minúsculas ("Información" -> "informacion").
+
+    Analogía Java: como Normalizer.normalize(s, Form.NFD) + replaceAll("\\p{M}", "").
+    Sin esto, "informacion privada" (sin tilde) se escaparía de la regla de privacidad.
+    """
+    descompuesto = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in descompuesto if not unicodedata.combining(c)).casefold()
+
+
 def _has(text: str, words: list[str]) -> bool:
-    t = text.lower()
-    return any(w in t for w in words)
+    t = _normalize(text)
+    return any(_normalize(w) in t for w in words)
 
 
 RULES: list[Rule] = [

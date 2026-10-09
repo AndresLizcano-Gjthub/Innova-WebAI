@@ -36,5 +36,18 @@ class TestRouter(unittest.TestCase):
         self.assertTrue(len(fallback_models(SOL)) > 0)
 
 
+class TestNormalizacion(unittest.TestCase):
+    """R-02: tildes y mayúsculas no deben dejar escapar un texto privado."""
+
+    def test_sin_tilde_sigue_siendo_privado(self):
+        self.assertEqual(choose_route("informacion privada del cliente").category, "procesamiento_privado")
+
+    def test_tilde_descompuesta_nfd_sigue_siendo_privado(self):
+        self.assertEqual(choose_route("información privada del cliente").category, "procesamiento_privado")
+
+    def test_mayusculas_con_tilde_son_privado(self):
+        self.assertEqual(choose_route("INFORMACIÓN PRIVADA del cliente").category, "procesamiento_privado")
+
+
 if __name__ == "__main__":
     unittest.main()
