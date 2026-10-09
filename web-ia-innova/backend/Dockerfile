@@ -10,7 +10,7 @@ RUN useradd -m -u 1000 appuser
 WORKDIR /code
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY --chown=appuser:appuser app ./app
+COPY app ./app
 
 USER appuser
 
