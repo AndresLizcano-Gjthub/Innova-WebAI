@@ -17,7 +17,11 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   }
 
   return (
-    <div className={`message message--assistant${message.isError ? " message--error" : ""}`}>
+    // F-02: los errores llevan role="alert" para que se anuncien de inmediato (como un Exception visible).
+    <div
+      className={`message message--assistant${message.isError ? " message--error" : ""}`}
+      role={message.isError ? "alert" : undefined}
+    >
       <img className="avatar" src="/logo.svg" alt="" aria-hidden="true" />
       <div className="message__body">
         {message.isError && <strong className="error-label">Error. </strong>}

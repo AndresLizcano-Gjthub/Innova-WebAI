@@ -13,11 +13,31 @@ export default function ChatApp() {
     useChat();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   // Baja automáticamente al último mensaje.
+  // F-08: si el usuario pidió menos movimiento, el salto es instantáneo (sin scroll suave).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth" });
   }, [activeConversation.messages.length, isLoading]);
+
+  // F-01: al cerrar la barra lateral devolvemos el foco al botón de menú (que la abrió).
+  // Analogía Java: como el finally que restaura el estado previo al salir de un diálogo modal.
+  function closeSidebar() {
+    setSidebarOpen(false);
+    menuBtnRef.current?.focus();
+  }
+
+  // F-01: Escape cierra la barra lateral solo mientras está abierta.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") closeSidebar();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sidebarOpen]);
 
   const isEmpty = activeConversation.messages.length === 0;
 
@@ -27,7 +47,7 @@ export default function ChatApp() {
         conversations={conversations}
         activeId={activeConversation.id}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={closeSidebar}
         onNew={newConversation}
         onSelect={selectConversation}
       />
@@ -35,6 +55,7 @@ export default function ChatApp() {
       <main className="main">
         <header className="topbar">
           <button
+            ref={menuBtnRef}
             type="button"
             className="icon-btn menu-btn"
             onClick={() => setSidebarOpen(true)}
@@ -52,17 +73,25 @@ export default function ChatApp() {
         )}
 
         <div className="messages">
-          {isEmpty ? (
-            <WelcomeScreen onPick={send} />
-          ) : (
-            <div className="messages__inner">
-              {activeConversation.messages.map((m) => (
-                <ChatMessage key={m.id} message={m} />
-              ))}
-              {isLoading && <LoadingIndicator />}
-              <div ref={bottomRef} />
-            </div>
-          )}
+          {isEmpty && <WelcomeScreen onPick={send} />}
+          {/* F-02: el contenedor role="log" es PERSISTENTE (siempre montado, aunque esté vacío).
+              Los lectores de pantalla solo anuncian cambios en regiones que ya existían:
+              si lo montáramos junto con el primer mensaje, ese primer mensaje no se leería.
+              Analogía Java: como un Logger ya registrado en un appender; los "additions"
+              son las nuevas líneas de log que se anuncian, sin releer las anteriores. */}
+          <div
+            className={`messages__inner${isEmpty ? " messages__inner--empty" : ""}`}
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-label="Conversación"
+          >
+            {activeConversation.messages.map((m) => (
+              <ChatMessage key={m.id} message={m} />
+            ))}
+            {isLoading && <LoadingIndicator />}
+            <div ref={bottomRef} />
+          </div>
         </div>
 
         <ChatInput onSend={send} disabled={isLoading || !isOnline} />

@@ -14,6 +14,11 @@ const API_URL = process.env.NEXT_PUBLIC_ORCHESTRATOR_URL;
 const TIMEOUT_MS = 30_000;
 const ENDPOINT_PATH = "/orchestrate"; // SUPUESTO: confirmar con backend
 
+// B-09: longitud máxima del mensaje. DEBE coincidir con MAX_MESSAGE_CHARS del backend
+// (backend/app/schemas.py). Analogía Java: una constante compartida del contrato, como
+// un `public static final int` que cliente y servidor deben mantener sincronizada a mano.
+export const MAX_MESSAGE_CHARS = 32_000;
+
 export class OrchestratorError extends Error {}
 
 export async function sendMessage(req: OrchestratorRequest): Promise<OrchestratorResult> {
@@ -31,11 +36,25 @@ export async function sendMessage(req: OrchestratorRequest): Promise<Orchestrato
       signal: controller.signal,
     });
 
+    // F-05: mensaje distinto según el estado HTTP.
+    if (res.status === 429) {
+      throw new OrchestratorError("Demasiadas solicitudes, espera un momento e inténtalo de nuevo.");
+    }
+    if (res.status >= 500) {
+      throw new OrchestratorError("El servidor tuvo un problema. Inténtalo de nuevo en unos instantes.");
+    }
     if (!res.ok) {
       throw new OrchestratorError(`El servidor respondió con error ${res.status}. Intenta de nuevo.`);
     }
 
-    const data: unknown = await res.json();
+    // F-05: un JSON inválido NO es un fallo de red; se separa para no decir "revisa tu conexión".
+    // Analogía Java: capturar JsonParseException aparte de IOException.
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch {
+      throw new OrchestratorError("La respuesta del servidor tiene un formato inesperado.");
+    }
     return parseResponse(data);
   } catch (error) {
     if (error instanceof OrchestratorError) throw error;
