@@ -73,7 +73,6 @@ Copia `.env.example` a `.env` (Git lo ignora). **Nunca subas el `.env`.**
 | `GESTORA_TIMEOUT_S` | Espera máxima a Gemini | `4` |
 | `GESTORA_MAX_CALLS_PER_MIN` | Tope local de llamadas a Gemini | `15` |
 | `PRIVATE_ROUTE_URL` | Ruta privada (https) para el modo real | vacío |
-| `APP_ENV` | `production` y `test` **no** cargan el `.env` | sin definir |
 
 ### Cómo obtener la clave de Gemini
 1. Entra a [Google AI Studio](https://aistudio.google.com/apikey) con tu cuenta de Google.
@@ -88,8 +87,10 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env      # y rellena GEMINI_API_KEY si quieres la Gestora real
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000 --env-file .env
 ```
+
+El código **no lee** el `.env`: lo carga uvicorn con `--env-file .env` (por eso hay que pasarlo al arrancar). Sin esa opción la clave no se carga y la Gestora funciona solo con reglas.
 
 Documentación interactiva: http://localhost:8000/docs
 
@@ -99,14 +100,14 @@ Documentación interactiva: http://localhost:8000/docs
 python -m unittest -v
 ```
 
-Las pruebas **no usan la red ni la clave real** (`tests/__init__.py` fija `APP_ENV=test` y un clasificador falso).
+Las pruebas **no usan la red ni la clave real** (`tests/__init__.py` descarta cualquier `GEMINI_API_KEY` del entorno y las pruebas usan un clasificador falso).
 
 ## Desplegar
 
 Hugging Face Spaces con SDK **Docker** (el Dockerfile escucha en `${PORT:-7860}` y corre sin root) **exige un plan de pago para crear el Space** (verificado en la documentación de Hugging Face). La decisión de hosting sigue abierta; el Dockerfile es portable a otros servicios.
 
 1. Sube Dockerfile, requirements.txt y la carpeta app/.
-2. Variables y Secrets del hosting: `ALLOWED_ORIGINS`, `GEMINI_API_KEY`, etc. El contenedor define `APP_ENV=production`, así que no carga ningún `.env`.
+2. Variables y Secrets del hosting: `ALLOWED_ORIGINS`, `GEMINI_API_KEY`, etc. El contenedor no incluye ningún `.env` (lo excluye `.dockerignore`) y el código tampoco lo lee.
 3. La URL pública es la que va en `NEXT_PUBLIC_ORCHESTRATOR_URL` del frontend.
 
 El Dockerfile aún no se ha probado con `docker build` en este equipo.

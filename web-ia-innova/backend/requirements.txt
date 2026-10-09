@@ -3,4 +3,6 @@ fastapi==0.143.0
 uvicorn[standard]==0.54.0
 pydantic==2.14.0
 httpx==0.28.1
+# python-dotenv lo usa uvicorn para `--env-file .env` (ya viene con uvicorn[standard]); el código no lo importa.
+# Se deja fijado para que la versión sea reproducible.
 python-dotenv==1.2.4

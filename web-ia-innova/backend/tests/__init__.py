@@ -1,10 +1,10 @@
-"""Aislamiento de las pruebas: NUNCA deben leer el .env real ni tocar la red.
+"""Aislamiento de las pruebas: NUNCA deben usar una clave real ni tocar la red.
 
-APP_ENV=test hace que app.main NO cargue el archivo .env (donde vive la clave de Gemini),
-y se fuerza el modo por reglas. Se ejecuta antes de importar cualquier módulo de la app.
+El código no lee el .env (lo hace uvicorn con --env-file), pero si alguien ejecuta las pruebas desde
+una terminal que ya tiene GEMINI_API_KEY en el entorno, aquí se descarta y se fuerza el modo por reglas.
+Se ejecuta antes de importar cualquier módulo de la app.
 """
 import os
 
-os.environ["APP_ENV"] = "test"
 os.environ["GESTORA_MODE"] = "rules"
 os.environ.pop("GEMINI_API_KEY", None)

@@ -93,5 +93,18 @@ class TestModoRealUnico(unittest.TestCase):
                 self.assertIsInstance(get_provider(), RealProvider if esperado_real else MockProvider)
 
 
+class TestElCodigoNoCargaDotenv(unittest.TestCase):
+    """A-04: el código NO lee .env por su cuenta; en local lo carga `uvicorn --env-file .env`."""
+
+    def test_main_no_usa_dotenv_ni_app_env(self):
+        from pathlib import Path
+
+        import app.main
+
+        fuente = Path(app.main.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("dotenv", fuente)
+        self.assertNotIn("APP_ENV", fuente)
+
+
 if __name__ == "__main__":
     unittest.main()

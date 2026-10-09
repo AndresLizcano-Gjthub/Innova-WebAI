@@ -2,7 +2,6 @@ import logging
 import os
 import time
 import uuid
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,12 +11,8 @@ from app.gestora import get_classifier, gestora_status
 from app.router import PRIVATE_CATEGORY, decide, fallback_models
 from app.schemas import OrchestrateRequest, OrchestrateResponse
 
-# Solo en DESARROLLO se carga backend/.env (donde vive GEMINI_API_KEY). En producción las variables
-# vienen del hosting (Secrets), y en las pruebas APP_ENV=test evita leer el .env real.
-if os.getenv("APP_ENV", "").strip().lower() not in ("production", "test"):
-    from dotenv import load_dotenv
-
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+# Este código NO lee el archivo .env. En local se carga al arrancar con `uvicorn ... --env-file .env`;
+# en producción las variables vienen del hosting (Secrets). Así no hay forma de cargar un .env por accidente.
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("orchestrator")
