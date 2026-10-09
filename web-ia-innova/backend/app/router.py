@@ -7,11 +7,17 @@ Así, si dos reglas se contradicen, el resultado es siempre el mismo (determinis
 PENDIENTE: los nombres de modelo son los del informe y deben validarse
 contra los proveedores reales antes de usarlos en producción.
 """
+import logging
 import re
 import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:  # solo para anotaciones; evita importar gestora (y httpx) al cargar el router
+    from app.gestora import Classifier
+
+log = logging.getLogger("router")
 
 # Nombres lógicos de modelos (según el informe)
 SOL = "gpt-5.6-sol"
@@ -174,14 +180,59 @@ class Decision:
     category: str
     model: str
     reason: str
+    # Quién decidió: "regla", "gestora_llm" (clasificó Gemini) o "regla_respaldo" (Gemini falló).
+    decided_by: str = "regla"
+
+
+def _first_match(message: str) -> Rule:
+    """La primera regla (por prioridad) que coincide; si ninguna, la regla por defecto."""
+    for rule in _RULES_ORDENADAS:
+        if rule.matches(message):
+            return rule
+    return DEFAULT_RULE
 
 
 def choose_route(message: str) -> Decision:
     """Devuelve la decisión de la primera regla (por prioridad) que coincida."""
-    for rule in _RULES_ORDENADAS:
-        if rule.matches(message):
-            return Decision(rule.name, rule.model, rule.reason)
-    return Decision(DEFAULT_RULE.name, DEFAULT_RULE.model, DEFAULT_RULE.reason)
+    rule = _first_match(message)
+    return Decision(rule.name, rule.model, rule.reason)
+
+
+# Reglas de SEÑAL FUERTE (privacidad, masivo, complejo, contexto, cotidiana): deciden ellas solas.
+# Solo la regla 60 (tarea breve por longitud) y la regla por defecto son "ambiguas" y consultan al LLM.
+_STRONG_PRIORITIES = {10, 20, 30, 40, 50}
+
+# Categoría -> regla (y por tanto -> modelo). Reutiliza las mismas constantes de modelo.
+_RULE_BY_CATEGORY = {r.name: r for r in [*RULES, DEFAULT_RULE]}
+
+
+def decide(message: str, classifier: Optional["Classifier"]) -> Decision:
+    """Decisión HÍBRIDA de la IA Gestora (Gemini solo clasifica; no genera la respuesta).
+
+    1. La regla 10 (privacidad) se evalúa SIEMPRE primero y de forma determinista: si coincide,
+       el texto NUNCA se envía a Gemini.
+    2. Si coincide una regla de señal fuerte (20, 30, 40, 50) decide la regla, sin llamar al LLM.
+    3. Si solo coincide la regla 60 o la regla por defecto, clasifica Gemini.
+    4. Si Gemini falla (sin clave, timeout, 429, JSON inválido, categoría desconocida o cualquier
+       excepción) se usa el resultado de las reglas: la app nunca se cae por la Gestora.
+
+    Analogía Java: un Strategy con respaldo; `classifier` es la interface inyectada (y falsa en pruebas).
+    """
+    rule = _first_match(message)
+    decision_de_regla = Decision(rule.name, rule.model, rule.reason)
+    if rule.priority in _STRONG_PRIORITIES or classifier is None or not classifier.enabled:
+        return decision_de_regla
+
+    try:
+        categoria = classifier.classify(message)
+    except Exception as exc:  # cualquier fallo del clasificador se contiene aquí
+        log.warning("clasificador falló (%s): se usan las reglas", type(exc).__name__)
+        categoria = None
+
+    elegida = _RULE_BY_CATEGORY.get(categoria) if isinstance(categoria, str) else None
+    if elegida is None:
+        return Decision(rule.name, rule.model, rule.reason, decided_by="regla_respaldo")
+    return Decision(elegida.name, elegida.model, f"IA Gestora: {elegida.reason}", decided_by="gestora_llm")
 
 
 def fallback_models(category: str, failed_model: str) -> list[str]:
