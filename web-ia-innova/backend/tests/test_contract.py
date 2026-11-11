@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from app.auth import USUARIO_DE_DESARROLLO, get_current_user
 from app.main import app
 from app.providers import ProviderError
 from app.schemas import MAX_MESSAGE_CHARS
@@ -29,7 +30,13 @@ class ClasificadorFalso:
 
 
 class TestOrchestrateContrato(unittest.TestCase):
+    """El contrato de /orchestrate se prueba con un usuario ya autenticado (la autenticación en sí se
+    prueba en test_auth.py y test_auth_endpoints.py). Se sustituye la dependencia de FastAPI, igual que
+    se inyecta un Classifier falso."""
+
     def setUp(self):
+        app.dependency_overrides[get_current_user] = lambda: USUARIO_DE_DESARROLLO
+        self.addCleanup(app.dependency_overrides.clear)
         self.client = TestClient(app)
 
     def _post(self, mensaje, clasificador=None):
@@ -154,6 +161,11 @@ class TestContratoConElFrontend(unittest.TestCase):
     def test_endpoint_y_cuerpo(self):
         self.assertIn('"/orchestrate"', self.ts)
         self.assertIn("JSON.stringify({ message: req.message })", self.ts)
+
+    def test_el_frontend_envia_el_jwt_como_bearer(self):
+        # MVP-1: el backend exige `Authorization: Bearer <jwt>`; si el frontend dejara de mandarla, el chat
+        # real daría 401 siempre y esta prueba lo avisa antes de desplegar.
+        self.assertIn("Authorization: `Bearer ${token}`", self.ts)
 
     def test_el_limite_de_mensaje_coincide(self):
         encontrado = re.search(r"MAX_MESSAGE_CHARS\s*=\s*([\d_]+)", self.ts)
